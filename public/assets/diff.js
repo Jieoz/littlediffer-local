@@ -101,12 +101,101 @@
   /* ---- char-level refinement ------------------------------------------- */
 
   /*
-   * Tokenize a line into word-ish chunks so intra-line highlights land on word
-   * boundaries (closer to how Monaco renders) rather than single characters.
+   * Tokenize a line into chunks so intra-line highlights land on sensible
+   * boundaries (closer to how Monaco renders).
+   *
+   * The old implementation used /(\s+|\w+|[^\s\w]+)/g. Without the `u` flag
+   * `\w` is ASCII-only, so CJK characters fell into the catch-all "other" group
+   * and whole runs of Han/Hiragana/Katakana/Hangul were treated as one token.
+   * Pure numbers were likewise glued into a single \w token. Both made the
+   * char-level refinement paint entire chunks as changed (e.g. 刚刚9 -> 刚刚好,
+   * 22263 -> 11263) instead of just the differing characters.
+   *
+   * The classifier below walks code points (surrogate-pair aware) and groups by
+   * category, with two deliberate exceptions that get character granularity:
+   *   - CJK characters: one token per character.
+   *   - decimal digits: one token per digit.
+   * Latin words / identifiers stay grouped, whitespace stays grouped (so
+   * ignoreWhitespace semantics are unchanged), and punctuation runs stay
+   * grouped. Concatenating every token reproduces the input exactly; the
+   * renderer consumes the resulting parts directly so CJK/codepoint tokens do
+   * not get remapped through fragile UTF-16 offsets.
    */
+
+  // CJK scripts that read most naturally diffed one character at a time.
+  // Hiragana, Katakana, CJK Unified (+ Ext A), compatibility ideographs,
+  // Hangul syllables and jamo. Tested per code point, so it covers the BMP
+  // ranges that this tool sees in practice.
+  function isCjkCodePoint(cp) {
+    return (
+      (cp >= 0x3040 && cp <= 0x30FF) ||   // Hiragana + Katakana
+      (cp >= 0x3400 && cp <= 0x4DBF) ||   // CJK Unified Ext A
+      (cp >= 0x4E00 && cp <= 0x9FFF) ||   // CJK Unified Ideographs
+      (cp >= 0xF900 && cp <= 0xFAFF) ||   // CJK Compatibility Ideographs
+      (cp >= 0xAC00 && cp <= 0xD7A3) ||   // Hangul syllables
+      (cp >= 0x1100 && cp <= 0x11FF) ||   // Hangul Jamo
+      (cp >= 0x3130 && cp <= 0x318F) ||   // Hangul Compatibility Jamo
+      (cp >= 0x20000 && cp <= 0x2FA1F)    // CJK Unified Ext B+ (supplementary)
+    );
+  }
+
+  function isDigitCodePoint(cp) { return cp >= 0x30 && cp <= 0x39; }
+  function isWhitespaceCodePoint(cp) {
+    // Match the previous \s behaviour for the common cases.
+    return cp === 0x20 || cp === 0x09 || cp === 0x0A || cp === 0x0D ||
+      cp === 0x0B || cp === 0x0C || cp === 0xA0 || cp === 0xFEFF;
+  }
+  // Word constituents: ASCII word chars plus the common Latin/Greek/Cyrillic
+  // letter ranges, tested per character. CJK is handled separately above so it
+  // never reaches here. Written with \u escapes (not literal glyphs) so the
+  // pattern is independent of how the source file is decoded, and kept to
+  // explicit BMP ranges to avoid relying on the regexp `u` flag.
+  var WORD_RE = /[\wÀ-ɏͰ-ϿЀ-ӿ]/;
+  function isWordChar(ch, cp) {
+    if (cp === 0x5F) return true;            // underscore
+    return WORD_RE.test(ch);
+  }
+
+  // Categories: 0=whitespace 1=word 2=cjk 3=digit 4=other
+  function categoryOf(ch, cp) {
+    if (isWhitespaceCodePoint(cp)) return 0;
+    if (isCjkCodePoint(cp)) return 2;
+    if (isDigitCodePoint(cp)) return 3;
+    if (isWordChar(ch, cp)) return 1;
+    return 4;
+  }
+
   function tokenize(line) {
-    var m = line.match(/(\s+|\w+|[^\s\w]+)/g);
-    return m || [];
+    var tokens = [];
+    var i = 0, len = line.length;
+    var cur = '', curCat = -1;
+    function flush() {
+      if (cur === '') return;
+      tokens.push(cur);
+      cur = '';
+    }
+    while (i < len) {
+      var cp = line.codePointAt(i);
+      var ch = cp > 0xFFFF ? line.slice(i, i + 2) : line[i];
+      var step = cp > 0xFFFF ? 2 : 1;
+      var cat = categoryOf(ch, cp);
+      // CJK and digits get one token per character; everything else groups
+      // runs of the same category.
+      if (cat === 2 || cat === 3) {
+        flush();
+        tokens.push(ch);
+        curCat = -1;
+      } else if (cat === curCat) {
+        cur += ch;
+      } else {
+        flush();
+        cur = ch;
+        curCat = cat;
+      }
+      i += step;
+    }
+    flush();
+    return tokens;
   }
 
   // Returns {orig:[{text,changed}], mod:[{text,changed}]} for a modified couple.
@@ -266,6 +355,7 @@
   global.LittleDiff = {
     computeRows: computeRows,
     splitLines: splitLines,
+    // Underscored exports are test hooks, not public UI API.
     _refineChars: refineChars,
     _lcsOps: lcsOps
   };

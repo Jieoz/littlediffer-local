@@ -2,3 +2,6 @@
 /public/_rendered.html
 /rendered-snapshot.html
 *.log
+/build/
+__pycache__/
+*.pyc

@@ -97,6 +97,47 @@
     return (HL && HL.canHighlight(v)) ? v : null;
   }
 
+
+  function flattenSegments(segs) {
+    if (!segs) return null;
+    var out = [];
+    for (var i = 0; i < segs.length; i++) {
+      var seg = segs[i];
+      if (!seg || seg.text === '') continue;
+      out.push({ text: seg.text, cls: seg.cls || '', changed: false });
+    }
+    return out;
+  }
+
+  function partsWithSyntaxHtml(parts, synSegs, changeCls) {
+    if (!parts) return '';
+    var syn = flattenSegments(synSegs);
+    var out = '', si = 0, soff = 0;
+    for (var pi = 0; pi < parts.length; pi++) {
+      var p = parts[pi];
+      var remain = p.text;
+      while (remain.length) {
+        var synCls = '';
+        var take = remain.length;
+        if (syn && si < syn.length) {
+          while (si < syn.length && soff >= syn[si].text.length) { si++; soff = 0; }
+          if (si < syn.length) {
+            synCls = syn[si].cls || '';
+            take = Math.min(take, syn[si].text.length - soff);
+          }
+        }
+        var chunk = remain.slice(0, take);
+        var classes = '';
+        if (p.changed) classes += changeCls;
+        if (synCls) classes += (classes ? ' ' : '') + synCls;
+        out += classes ? '<span class="' + classes + '">' + esc(chunk) + '</span>' : esc(chunk);
+        remain = remain.slice(take);
+        if (syn && si < syn.length) { soff += take; }
+      }
+    }
+    return out;
+  }
+
   // Build one overlay line's inner HTML by merging two independent layers:
   //   - diff char-runs (parts): changed runs get a background class (cdel/cins)
   //   - syntax tokens (synSegs): each gets a foreground color class (tok-*)
@@ -181,7 +222,9 @@
       var ln = k + 1;
       var meta = info[ln] || { cls: '', parts: null, changeCls: '' };
       var synSegs = (lang && lines[k] !== '') ? HL.highlightLine(lines[k], lang, hlState).segments : null;
-      var content = buildLineHtml(lines[k], meta.parts, synSegs, meta.changeCls);
+      var content = meta.parts
+        ? partsWithSyntaxHtml(meta.parts, synSegs, meta.changeCls)
+        : buildLineHtml(lines[k], null, synSegs, meta.changeCls);
       if (!content) content = ZWSP;
       over.push('<span class="oline ' + meta.cls + '">' + content + '</span>');
       gut.push('<div class="gline ' + meta.cls + '">' + ln + '</div>');
@@ -223,11 +266,11 @@
       } else if (r.type === 'modify') {
         gut.push('<div class="gline del"><span class="gnum-old">' + r.origNo +
           '</span><span class="gnum-new"></span></div>');
-        over.push('<span class="oline del">' + (buildLineHtml(r.origText, r.origParts, synOf(r.origText), 'cdel') || ZWSP) + '</span>');
+        over.push('<span class="oline del">' + (partsWithSyntaxHtml(r.origParts, synOf(r.origText), 'cdel') || ZWSP) + '</span>');
         merged.push(r.origText);
         gut.push('<div class="gline ins"><span class="gnum-old"></span><span class="gnum-new">' +
           r.modNo + '</span></div>');
-        over.push('<span class="oline ins">' + (buildLineHtml(r.modText, r.modParts, synOf(r.modText), 'cins') || ZWSP) + '</span>');
+        over.push('<span class="oline ins">' + (partsWithSyntaxHtml(r.modParts, synOf(r.modText), 'cins') || ZWSP) + '</span>');
         merged.push(r.modText);
       } else if (r.type === 'delete') {
         gut.push('<div class="gline del"><span class="gnum-old">' + r.origNo +
