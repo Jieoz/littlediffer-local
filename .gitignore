@@ -1,0 +1,4 @@
+.DS_Store
+/public/_rendered.html
+/rendered-snapshot.html
+*.log

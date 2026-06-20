@@ -1,0 +1,561 @@
+/* =========================================================================
+   Little Differ — local edition styles.
+   Mirrors the source site (shadcn/ui token palette + Monaco-like diff editor).
+   ========================================================================= */
+
+/* Vendored Inter (Latin subset captured from source). */
+@font-face {
+    font-family: "InterLocal";
+    font-style: normal;
+    font-weight: 100 900;
+    font-display: swap;
+    src: url(/vendor/fonts/inter-latin.woff2) format("woff2");
+}
+/* Metric-compatible fallback (matches source's __Inter_Fallback). */
+@font-face {
+    font-family: "InterLocalFallback";
+    src: local("Arial");
+    ascent-override: 90.49%;
+    descent-override: 22.56%;
+    line-gap-override: 0.00%;
+    size-adjust: 107.06%;
+}
+
+/* ---- Design tokens (HSL triplets, from source CSS) -------------------- */
+:root {
+    --background: 0 0% 100%;
+    --foreground: 240 10% 3.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 10% 3.9%;
+    --primary: 240 5.9% 10%;
+    --primary-foreground: 0 0% 98%;
+    --muted: 240 4.8% 95.9%;
+    --muted-foreground: 240 3.8% 46.1%;
+    --accent: 240 4.8% 95.9%;
+    --accent-foreground: 240 5.9% 10%;
+    --border: 240 5.9% 90%;
+    --ring: 240 10% 3.9%;
+    --radius: 0.5rem;
+
+    /* Editor (light = source Monaco vs theme) */
+    --editor-bg: #ffffff;
+    --editor-fg: rgb(36, 41, 46);
+    --line-number: rgb(110, 119, 129);
+    --current-line: rgb(250, 251, 252);
+
+    /* Diff colors captured from source (side-by-side) */
+    --del-gutter: rgba(255, 56, 46, .2);
+    --del-line:   rgba(255, 156, 146, .2);
+    --del-char:   rgba(255, 34, 31, .2);
+    --ins-gutter: rgba(0, 255, 60, .2);
+    --ins-line:   rgba(134, 255, 163, .2);
+    --ins-char:   rgba(44, 226, 88, .35);
+
+    /* Connector band colors (between panes) */
+    --connector-del: rgba(255, 34, 31, .2);
+    --connector-ins: rgba(44, 226, 88, .35);
+}
+
+.dark {
+    --background: 240 10% 10%;
+    --foreground: 0 0% 98%;
+    --popover: 240 10% 3.9%;
+    --popover-foreground: 0 0% 98%;
+    --primary: 0 0% 98%;
+    --primary-foreground: 240 5.9% 10%;
+    --muted: 240 3.7% 15.9%;
+    --muted-foreground: 240 5% 64.9%;
+    --accent: 240 3.7% 15.9%;
+    --accent-foreground: 0 0% 98%;
+    --border: 240 3.7% 15.9%;
+    --ring: 240 4.9% 83.9%;
+
+    /* Monaco-like dark editor */
+    --editor-bg: #1e1e1e;
+    --editor-fg: #d4d4d4;
+    --line-number: #858585;
+    --current-line: #2a2a2a;
+
+    --del-gutter: rgba(255, 56, 46, .28);
+    --del-line:   rgba(255, 0, 0, .18);
+    --del-char:   rgba(255, 0, 0, .35);
+    --ins-gutter: rgba(0, 255, 60, .28);
+    --ins-line:   rgba(0, 255, 0, .14);
+    --ins-char:   rgba(0, 255, 0, .30);
+
+    --connector-del: rgba(255, 0, 0, .3);
+    --connector-ins: rgba(0, 255, 0, .3);
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+}
+
+body {
+    font-family: "InterLocal", "InterLocalFallback", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+    font-size: 16px;
+    line-height: 24px;
+    background: hsl(var(--background));
+    color: hsl(var(--foreground));
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+}
+
+.sr-only {
+    position: absolute;
+    width: 1px; height: 1px;
+    padding: 0; margin: -1px;
+    overflow: hidden;
+    clip: rect(0,0,0,0);
+    white-space: nowrap;
+    border: 0;
+}
+
+/* ---- App shell -------------------------------------------------------- */
+.app {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    background: hsl(var(--background));
+}
+
+/* ---- Top bar ---------------------------------------------------------- */
+/* Source: flex, pl-4 (16px), p-1 (4px), gap-4, border-b. Height ~44px. */
+.topbar {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 4px 4px 4px 16px;
+    border-bottom: 1px solid hsl(var(--border));
+    position: relative;
+    min-height: 44px;
+    flex: 0 0 auto;
+}
+
+.spacer { flex: 1 1 auto; }
+
+/* Checkbox-style control buttons */
+.ctrl {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    cursor: pointer;
+    user-select: none;
+}
+
+.checkbox {
+    appearance: none;
+    width: 16px;
+    height: 16px;
+    flex: 0 0 16px;
+    border: 1px solid hsl(var(--primary));
+    border-radius: 4px;
+    background: transparent;
+    box-shadow: 0 1px 2px 0 rgba(0,0,0,.05);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    cursor: pointer;
+    color: hsl(var(--primary-foreground));
+    transition: background-color .12s, border-color .12s;
+}
+.checkbox:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 1px hsl(var(--ring));
+}
+.checkbox .check-icon {
+    width: 14px;
+    height: 14px;
+    opacity: 0;
+    transition: opacity .1s;
+}
+.checkbox[aria-checked="true"] {
+    background: hsl(var(--primary));
+    border-color: hsl(var(--primary));
+}
+.checkbox[aria-checked="true"] .check-icon { opacity: 1; }
+
+.ctrl-label {
+    font-size: 14px;
+    line-height: 20px;
+    font-weight: 500;
+    opacity: .8;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Icon buttons (swap + theme): 36x36 ghost */
+.icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border: none;
+    background: transparent;
+    color: hsl(var(--foreground));
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background-color .12s, color .12s;
+    position: relative;
+}
+.icon-btn:hover {
+    background: hsl(var(--accent));
+    color: hsl(var(--accent-foreground));
+}
+.icon-btn:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 1px hsl(var(--ring));
+}
+.icon-btn svg { width: 19.2px; height: 19.2px; } /* 1.2rem like source */
+
+/* Swap button: absolutely centered on large screens (source: left calc(50%-0.6rem)) */
+@media (min-width: 1024px) {
+    .icon-btn-center {
+        position: absolute;
+        left: calc(50% - 0.6rem);
+    }
+}
+
+/* Theme icon crossfade */
+.theme-moon { display: none; }
+.dark .theme-sun { display: none; }
+.dark .theme-moon { display: inline; }
+
+/* ---- Diff editor ------------------------------------------------------ */
+.editor {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: row;
+    min-height: 0;
+    background: var(--editor-bg);
+    position: relative;
+    overflow: hidden;
+}
+
+.pane {
+    flex: 1 1 50%;
+    min-width: 0;
+    display: flex;
+    flex-direction: row;
+    position: relative;
+    overflow: hidden;
+}
+
+/* Connector strip between the two panes (diagonals for moved/changed blocks) */
+.connector {
+    flex: 0 0 0px;
+    width: 0;
+    position: relative;
+    overflow: visible;
+    z-index: 2;
+    pointer-events: none;
+}
+.connector-svg {
+    position: absolute;
+    top: 0;
+    left: -1px;
+    width: 2px;
+    height: 100%;
+    overflow: visible;
+}
+
+/* Overview ruler on the far right (source: x=1410 width 30) */
+.ruler {
+    flex: 0 0 14px;
+    width: 14px;
+    position: relative;
+    background: var(--editor-bg);
+    border-left: 1px solid hsl(var(--border) / .6);
+    overflow: hidden;
+}
+.ruler .mark {
+    position: absolute;
+    left: 0;
+    right: 0;
+    min-height: 2px;
+}
+.ruler .mark.del { background: var(--del-char); }
+.ruler .mark.ins { background: var(--ins-char); }
+
+/* Gutter holds line numbers + diff change markers */
+.gutter {
+    flex: 0 0 auto;
+    min-width: 52px;
+    text-align: right;
+    background: var(--editor-bg);
+    color: var(--line-number);
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+    font-size: 13px;
+    line-height: 20px;
+    user-select: none;
+    overflow: hidden;
+    position: relative;
+}
+.gutter .gline {
+    height: 20px;
+    padding: 0 12px 0 12px;
+    position: relative;
+    white-space: nowrap;
+}
+.gutter .gline.dimmed { opacity: .4; }
+.gutter .gline.del { background: var(--del-gutter); }
+.gutter .gline.ins { background: var(--ins-gutter); }
+.gutter .gline.empty { color: transparent; }
+
+/* The text content area: textarea over an overlay <pre> */
+.content {
+    flex: 1 1 auto;
+    position: relative;
+    min-width: 0;
+    overflow: hidden;
+}
+
+.overlay,
+.input {
+    margin: 0;
+    border: 0;
+    padding: 0 0 0 6px;
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+    font-size: 13px;
+    line-height: 20px;
+    tab-size: 4;
+    -moz-tab-size: 4;
+    white-space: pre;
+    word-wrap: normal;
+    overflow-wrap: normal;
+}
+
+/* Overlay paints the diff backgrounds + (optional) syntax color underneath. */
+.overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    overflow: hidden;
+    pointer-events: none;
+    color: var(--editor-fg);
+    background: transparent;
+}
+.overlay .oline {
+    height: 20px;
+    display: block;
+    width: 100%;
+}
+.overlay .oline.del { background: var(--del-line); }
+.overlay .oline.ins { background: var(--ins-line); }
+.overlay .oline.current { background: var(--current-line); }
+.overlay .oline.empty-fill { background: rgba(212, 212, 212, .06); }
+.dark .overlay .oline.empty-fill { background: rgba(255,255,255,.03); }
+.overlay .cdel { background: var(--del-char); border-radius: 2px; }
+.overlay .cins { background: var(--ins-char); border-radius: 2px; }
+
+/* ---- Local syntax highlighting (assets/highlight.js) ------------------ */
+/* Foreground-only token colors painted in the overlay. They layer over the
+   diff background runs (cdel/cins/del/ins) without disturbing them. Light
+   palette mirrors VS Code Light+, dark mirrors VS Code Dark+. */
+:root {
+    --tok-keyword:  #0000ff;
+    --tok-string:   #a31515;
+    --tok-number:   #098658;
+    --tok-comment:  #008000;
+    --tok-function: #795e26;
+    --tok-type:     #267f99;
+    --tok-attr:     #e50000;
+    --tok-tag:      #800000;
+    --tok-var:      #0070c1;
+    --tok-meta:     #af00db;
+    --tok-punct:    #6a6a6a;
+}
+.dark {
+    --tok-keyword:  #569cd6;
+    --tok-string:   #ce9178;
+    --tok-number:   #b5cea8;
+    --tok-comment:  #6a9955;
+    --tok-function: #dcdcaa;
+    --tok-type:     #4ec9b0;
+    --tok-attr:     #9cdcfe;
+    --tok-tag:      #569cd6;
+    --tok-var:      #9cdcfe;
+    --tok-meta:     #c586c0;
+    --tok-punct:    #808080;
+}
+.overlay .tok-keyword  { color: var(--tok-keyword); }
+.overlay .tok-string   { color: var(--tok-string); }
+.overlay .tok-number   { color: var(--tok-number); }
+.overlay .tok-comment  { color: var(--tok-comment); font-style: italic; }
+.overlay .tok-function { color: var(--tok-function); }
+.overlay .tok-type     { color: var(--tok-type); }
+.overlay .tok-attr     { color: var(--tok-attr); }
+.overlay .tok-tag      { color: var(--tok-tag); }
+.overlay .tok-var      { color: var(--tok-var); }
+.overlay .tok-meta     { color: var(--tok-meta); }
+.overlay .tok-punct    { color: var(--tok-punct); }
+
+/* The real, editable text. Its glyphs are transparent so only the overlay
+   below paints visible text (incl. char-level diff highlights); the textarea
+   still owns the caret, selection and native input. The overlay is rendered
+   1:1 with this textarea's own lines, so caret and colors stay aligned. */
+.input {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    width: 100%;
+    height: 100%;
+    resize: none;
+    background: transparent;
+    color: transparent;
+    caret-color: var(--editor-fg);
+    outline: none;
+    overflow: auto;
+}
+/* Hide native scrollbar jitter; JS syncs scroll between layers. */
+.input::selection { background: rgba(51, 153, 255, .30); }
+
+/* Word-wrap toggle */
+.editor[data-wrap="on"] .overlay,
+.editor[data-wrap="on"] .input {
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    overflow-wrap: anywhere;
+}
+.editor[data-wrap="on"] .input { overflow-x: hidden; }
+
+/* ---- Unified view ----------------------------------------------------- */
+/* In unified mode we hide the modified pane + connector + ruler and render a
+   single merged column inside the original pane's overlay/textarea. */
+.editor[data-view="unified"] .pane-modified,
+.editor[data-view="unified"] .connector { display: none; }
+.editor[data-view="unified"] .pane-original { flex: 1 1 100%; }
+.editor[data-view="unified"] .gutter { min-width: 84px; }
+/* unified gutter shows two number columns */
+.gutter .gline .gnum-old,
+.gutter .gline .gnum-new {
+    display: inline-block;
+    width: 28px;
+    text-align: right;
+}
+.gutter .gline .gnum-old { padding-right: 8px; }
+
+/* ---- Status bar ------------------------------------------------------- */
+/* Source: justify-between, border-t, height ~32px. */
+.statusbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-top: 1px solid hsl(var(--border));
+    padding-left: 4px;
+    min-height: 32px;
+    flex: 0 0 auto;
+    position: relative;
+    background: hsl(var(--background));
+}
+
+.lang-wrap { position: relative; }
+.lang-btn {
+    display: inline-flex;
+    align-items: center;
+    height: 32px;
+    padding: 0 12px;
+    border: 0;
+    background: transparent;
+    color: hsl(var(--foreground));
+    font-size: 14px;
+    font-family: inherit;
+    cursor: pointer;
+    min-width: 0;
+    max-width: 260px;
+}
+.lang-btn:hover { background: hsl(var(--muted)); }
+.lang-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.lang-caret { margin-left: 4px; opacity: .5; flex: 0 0 auto; }
+
+.lang-menu {
+    position: absolute;
+    bottom: 36px;
+    left: 0;
+    width: 240px;
+    max-height: 320px;
+    overflow-y: auto;
+    background: hsl(var(--popover));
+    color: hsl(var(--popover-foreground));
+    border: 1px solid hsl(var(--border));
+    border-radius: var(--radius);
+    box-shadow: 0 4px 6px -1px rgba(0,0,0,.1), 0 2px 4px -2px rgba(0,0,0,.1);
+    z-index: 50;
+    padding: 4px;
+}
+.lang-menu .lang-search {
+    width: 100%;
+    border: 0;
+    border-bottom: 1px solid hsl(var(--border));
+    padding: 8px;
+    font-size: 14px;
+    font-family: inherit;
+    background: transparent;
+    color: inherit;
+    outline: none;
+    margin-bottom: 4px;
+}
+.lang-menu .lang-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 8px;
+    font-size: 14px;
+    border-radius: 4px;
+    cursor: pointer;
+}
+.lang-menu .lang-item:hover,
+.lang-menu .lang-item.active { background: hsl(var(--accent)); }
+.lang-menu .lang-item .tick { opacity: 0; }
+.lang-menu .lang-item.selected .tick { opacity: 1; }
+
+/* Privacy note: centered, absolute on large screens (source w-[300px]) */
+.privacy {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 12px;
+    color: hsl(240 4% 46%);
+    min-width: 0;
+}
+.privacy svg { width: 16px; height: 16px; flex: 0 0 16px; }
+.privacy-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (min-width: 1024px) {
+    .privacy {
+        position: absolute;
+        left: 50%;
+        width: 300px;
+        transform: translateX(-50%);
+        justify-content: center;
+    }
+}
+
+.oztune {
+    display: inline-flex;
+    align-items: center;
+    height: 32px;
+    padding: 0 12px;
+    font-size: 12px;
+    font-weight: 500;
+    color: hsl(var(--primary));
+    text-decoration: none;
+    text-underline-offset: 4px;
+}
+.oztune:hover { text-decoration: underline; }
+
+/* Hide Unified View control on very small screens (source: hidden sm:inline-flex) */
+@media (max-width: 639px) {
+    .ctrl-unified { display: none; }
+}
