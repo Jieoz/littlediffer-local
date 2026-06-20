@@ -1,5 +1,7 @@
 # Little Differ — local Nginx/PHP edition
 
+[中文说明](./README.zh-CN.md)
+
 A self-hosted, no-build recreation of [littlediffer.com](https://www.littlediffer.com/):
 a fast, minimalist text diff tool. This local edition reproduces the source UI
 and behavior with **plain PHP + HTML/CSS/JS** — no npm, no Node, no build step,
