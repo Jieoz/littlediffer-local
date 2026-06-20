@@ -90,7 +90,11 @@ README.md
   blocks, immediate updates, overview ruler, connector strip) is reproduced;
   pixel-exact Monaco rendering and full syntax highlighting are not.
 - **Diff algorithm.** A line-level LCS with word-level intra-line refinement,
-  rather than Monaco's diffing. Results are equivalent for typical text.
+  rather than Monaco's diffing. Results are equivalent for typical text. For
+  large inputs, the engine trims common prefix/suffix blocks before LCS and
+  falls back to coarse positional alignment once a diff window would allocate an
+  unsafe matrix; this keeps huge pastes responsive at the cost of less precise
+  highlighting inside heavily rewritten blocks.
 - **Language detection/highlighting.** Detection and syntax highlighting are
   implemented locally with a small static JS highlighter, not the source's
   Monaco tokenizer or ML model (`group1-shard1of1.bin`). Covered languages
@@ -100,5 +104,16 @@ README.md
 - **Unified view** is a combined read-oriented column (the source's Monaco
   unified renderer is also primarily read-oriented); editing happens in the
   side-by-side panes.
+
+## Performance notes
+
+- Common unchanged line prefixes/suffixes are skipped before running LCS, so a
+  one-line edit in a 10k+ line file stays fast.
+- Very large unmatched regions use a bounded fallback instead of freezing the
+  browser with an unbounded `n × m` matrix.
+- Intra-line refinement has the same prefix/suffix fast path and a smaller
+  safety cap for minified or very long single lines.
+- Large text input uses a slightly longer render debounce to avoid recomputing
+  on every keystroke while the user is still pasting/typing.
 
 See [`FEEDBACK_TO_UPSTREAM.md`](./FEEDBACK_TO_UPSTREAM.md) for notes/defaults.

@@ -152,7 +152,7 @@
   // Build one pane's overlay + gutter HTML, rendered 1:1 with that pane's own
   // textarea lines so the colored text, caret and char highlights stay aligned.
   // We index the diff rows by this side's line number, then walk the raw lines.
-  function renderSidePane(side, rows, rawText, overlayEl, gutterEl, lang) {
+  function renderSidePane(side, rows, rawText, overlayEl, gutterEl, lang, rawLines) {
     var isOrig = side === 'original';
     var info = {}; // 1-based line number -> { cls, parts|null, changeCls }
     for (var i = 0; i < rows.length; i++) {
@@ -172,7 +172,7 @@
       }
     }
 
-    var lines = Diff.splitLines(rawText);
+    var lines = rawLines || Diff.splitLines(rawText);
     // Highlight state threads through this pane's lines in document order so
     // block comments / triple-quoted strings / code fences span lines.
     var hlState = lang ? {} : null;
@@ -193,8 +193,8 @@
   function renderSideBySide(result) {
     var rows = result.rows;
     var lang = activeHighlightLang();
-    renderSidePane('original', rows, origInput.value, origOverlay, origGutter, lang);
-    renderSidePane('modified', rows, modInput.value, modOverlay, modGutter, lang);
+    renderSidePane('original', rows, origInput.value, origOverlay, origGutter, lang, result.aLines);
+    renderSidePane('modified', rows, modInput.value, modOverlay, modGutter, lang, result.bLines);
     lastRows = rows;
     renderRuler(rows);
     renderConnector(rows);
@@ -293,8 +293,25 @@
   /* ---- diff orchestration ---------------------------------------------- */
 
   var renderRaf = null;
+  var renderTimer = null;
+  var LARGE_TEXT_CHARS = 200000;
+  var LARGE_TEXT_LINES = 8000;
+  function isLargeText() {
+    var chars = state.original.length + state.modified.length;
+    if (chars >= LARGE_TEXT_CHARS) return true;
+    // Counting newlines is linear but cheaper than a full diff/render and only
+    // happens on an already large-ish input path.
+    if (chars < 40000) return false;
+    var lines = (state.original.match(/\n/g) || []).length + (state.modified.match(/\n/g) || []).length + 2;
+    return lines >= LARGE_TEXT_LINES;
+  }
   function scheduleRender() {
-    if (renderRaf) return;
+    if (renderRaf) { cancelAnimationFrame(renderRaf); renderRaf = null; }
+    clearTimeout(renderTimer);
+    if (isLargeText()) {
+      renderTimer = setTimeout(function () { renderTimer = null; doRender(); }, 120);
+      return;
+    }
     renderRaf = requestAnimationFrame(function () {
       renderRaf = null;
       doRender();

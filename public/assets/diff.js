@@ -41,8 +41,12 @@
    * tool handles (interactive paste) the O(n*m) memory is fine; we cap inputs
    * defensively in the caller.
    */
-  function lcsOps(arrA, arrB, eq) {
+  var LINE_LCS_CELL_LIMIT = 4000000;
+  var CHAR_LCS_CELL_LIMIT = 20000;
+
+  function lcsOps(arrA, arrB, eq, cellLimit) {
     var n = arrA.length, m = arrB.length;
+    if (cellLimit && n * m > cellLimit) return fallbackOps(arrA, arrB, eq);
     // Build LCS length table. Use typed-ish nested arrays.
     var dp = new Array(n + 1);
     for (var i = 0; i <= n; i++) {
@@ -77,6 +81,23 @@
     return ops;
   }
 
+  // Linear fallback for very large unmatched windows: preserves alignment by
+  // position and avoids allocating an O(n*m) matrix. It is intentionally coarser
+  // than LCS, but keeps huge pastes responsive instead of freezing the tab.
+  function fallbackOps(arrA, arrB, eq) {
+    var ops = [];
+    var n = arrA.length, m = arrB.length, min = Math.min(n, m);
+    var i = 0;
+    while (i < min) {
+      if (eq(arrA[i], arrB[i])) ops.push({ type: 'equal', a: i, b: i });
+      else { ops.push({ type: 'delete', a: i }); ops.push({ type: 'insert', b: i }); }
+      i++;
+    }
+    while (i < n) { ops.push({ type: 'delete', a: i }); i++; }
+    while (i < m) { ops.push({ type: 'insert', b: i }); i++; }
+    return ops;
+  }
+
   /* ---- char-level refinement ------------------------------------------- */
 
   /*
@@ -95,18 +116,38 @@
     var eq = ignoreWs
       ? function (x, y) { return normWs(x) === normWs(y); }
       : function (x, y) { return x === y; };
-    var ops = lcsOps(ta, tb, eq);
+
+    // Fast-path identical token prefix/suffix so long, mostly-identical lines
+    // do not pay for a full token matrix. This also keeps the coarse fallback
+    // useful: unchanged edges stay unhighlighted.
+    var pre = 0;
+    while (pre < ta.length && pre < tb.length && eq(ta[pre], tb[pre])) pre++;
+    var suf = 0;
+    while (suf < ta.length - pre && suf < tb.length - pre &&
+      eq(ta[ta.length - 1 - suf], tb[tb.length - 1 - suf])) suf++;
+
+    var midA = ta.slice(pre, ta.length - suf);
+    var midB = tb.slice(pre, tb.length - suf);
+    var ops = lcsOps(midA, midB, eq, CHAR_LCS_CELL_LIMIT);
     var orig = [], mod = [];
+    for (var pi = 0; pi < pre; pi++) {
+      orig.push({ text: ta[pi], changed: false });
+      mod.push({ text: tb[pi], changed: false });
+    }
     for (var k = 0; k < ops.length; k++) {
       var op = ops[k];
       if (op.type === 'equal') {
-        orig.push({ text: ta[op.a], changed: false });
-        mod.push({ text: tb[op.b], changed: false });
+        orig.push({ text: midA[op.a], changed: false });
+        mod.push({ text: midB[op.b], changed: false });
       } else if (op.type === 'delete') {
-        orig.push({ text: ta[op.a], changed: true });
+        orig.push({ text: midA[op.a], changed: true });
       } else {
-        mod.push({ text: tb[op.b], changed: true });
+        mod.push({ text: midB[op.b], changed: true });
       }
+    }
+    for (var si = suf; si > 0; si--) {
+      orig.push({ text: ta[ta.length - si], changed: false });
+      mod.push({ text: tb[tb.length - si], changed: false });
     }
     return { orig: orig, mod: mod };
   }
@@ -134,18 +175,36 @@
       ? function (x, y) { return normWs(x) === normWs(y); }
       : function (x, y) { return x === y; };
 
-    var ops = lcsOps(aLines, bLines, eqLine);
+    // Trim common prefix/suffix before LCS. Large files usually differ in a
+    // small middle window; this turns a 10k x 10k matrix into a tiny one.
+    var prefix = 0;
+    while (prefix < aLines.length && prefix < bLines.length && eqLine(aLines[prefix], bLines[prefix])) prefix++;
+    var suffix = 0;
+    while (suffix < aLines.length - prefix && suffix < bLines.length - prefix &&
+      eqLine(aLines[aLines.length - 1 - suffix], bLines[bLines.length - 1 - suffix])) suffix++;
+
+    var midA = aLines.slice(prefix, aLines.length - suffix);
+    var midB = bLines.slice(prefix, bLines.length - suffix);
+    var ops = lcsOps(midA, midB, eqLine, LINE_LCS_CELL_LIMIT);
 
     // Pair adjacent delete-runs with insert-runs into modify couples.
     var rows = [];
+    for (var pre = 0; pre < prefix; pre++) {
+      rows.push({
+        type: 'equal',
+        origNo: pre + 1, modNo: pre + 1,
+        origText: aLines[pre], modText: bLines[pre],
+        origParts: null, modParts: null
+      });
+    }
     var i = 0;
     while (i < ops.length) {
       var op = ops[i];
       if (op.type === 'equal') {
         rows.push({
           type: 'equal',
-          origNo: op.a + 1, modNo: op.b + 1,
-          origText: aLines[op.a], modText: bLines[op.b],
+          origNo: prefix + op.a + 1, modNo: prefix + op.b + 1,
+          origText: midA[op.a], modText: midB[op.b],
           origParts: null, modParts: null
         });
         i++;
@@ -161,12 +220,12 @@
       }
       var pairCount = Math.min(dels.length, inss.length);
       for (var p = 0; p < pairCount; p++) {
-        var oLine = aLines[dels[p]];
-        var mLine = bLines[inss[p]];
+        var oLine = midA[dels[p]];
+        var mLine = midB[inss[p]];
         var refined = refineChars(oLine, mLine, ignoreWs);
         rows.push({
           type: 'modify',
-          origNo: dels[p] + 1, modNo: inss[p] + 1,
+          origNo: prefix + dels[p] + 1, modNo: prefix + inss[p] + 1,
           origText: oLine, modText: mLine,
           origParts: refined.orig, modParts: refined.mod
         });
@@ -174,23 +233,34 @@
       for (var d = pairCount; d < dels.length; d++) {
         rows.push({
           type: 'delete',
-          origNo: dels[d] + 1, modNo: null,
-          origText: aLines[dels[d]], modText: null,
+          origNo: prefix + dels[d] + 1, modNo: null,
+          origText: midA[dels[d]], modText: null,
           origParts: null, modParts: null
         });
       }
       for (var s = pairCount; s < inss.length; s++) {
         rows.push({
           type: 'insert',
-          origNo: null, modNo: inss[s] + 1,
-          origText: null, modText: bLines[inss[s]],
+          origNo: null, modNo: prefix + inss[s] + 1,
+          origText: null, modText: midB[inss[s]],
           origParts: null, modParts: null
         });
       }
     }
 
+    var suffixStartA = aLines.length - suffix;
+    var suffixStartB = bLines.length - suffix;
+    for (var post = 0; post < suffix; post++) {
+      rows.push({
+        type: 'equal',
+        origNo: suffixStartA + post + 1, modNo: suffixStartB + post + 1,
+        origText: aLines[suffixStartA + post], modText: bLines[suffixStartB + post],
+        origParts: null, modParts: null
+      });
+    }
+
     var changed = rows.some(function (r) { return r.type !== 'equal'; });
-    return { rows: rows, changed: changed };
+    return { rows: rows, changed: changed, aLines: aLines, bLines: bLines, fallback: midA.length * midB.length > LINE_LCS_CELL_LIMIT };
   }
 
   global.LittleDiff = {

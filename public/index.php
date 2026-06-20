@@ -8,7 +8,7 @@
  *
  * Cache-busting version stamp for static assets.
  */
-$asset_version = '2';
+$asset_version = '3';
 $asset = static function (string $path) use ($asset_version): string {
     return $path . '?v=' . $asset_version;
 };
